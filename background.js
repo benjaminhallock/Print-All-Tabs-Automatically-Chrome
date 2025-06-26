@@ -1,20 +1,63 @@
 // background.js
-let intervalId;
+let timeoutId;
 let tabIndex = 0;
 let tabsToPrint = [];
 let allAvailableTabs = [];
 let printSettings = {
   interval: 3000, // Default 3 seconds
-  autoCloseTab: false
+  autoCloseTab: false,
 };
+let isPrinting = false;
+let flashInterval = null;
 
-// Update badge with total tab count
-function updateBadge() {
+// Update badge with total tab count and status color
+function updateBadge(status = "normal") {
   chrome.tabs.query({}, (tabs) => {
-    const validTabs = tabs.filter(tab => !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://'));
+    const validTabs = tabs.filter(
+      (tab) =>
+        !tab.url.startsWith("chrome://") &&
+        !tab.url.startsWith("chrome-extension://")
+    );
+
     chrome.action.setBadgeText({ text: validTabs.length.toString() });
-    chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+
+    // Set badge color based on status
+    switch (status) {
+      case "printing":
+        chrome.action.setBadgeBackgroundColor({ color: "#DC143C" }); // Red
+        break;
+      case "error":
+        chrome.action.setBadgeBackgroundColor({ color: "#FF8C00" }); // Orange
+        break;
+      case "normal":
+      default:
+        chrome.action.setBadgeBackgroundColor({ color: "#4CAF50" }); // Green
+        break;
+    }
   });
+}
+
+// Start flashing badge during printing
+function startBadgeFlashing() {
+  if (flashInterval) {
+    clearInterval(flashInterval);
+  }
+
+  let isRed = true;
+  flashInterval = setInterval(() => {
+    chrome.action.setBadgeBackgroundColor({
+      color: isRed ? "#DC143C" : "#8B0000", // Alternate between red and dark red
+    });
+    isRed = !isRed;
+  }, 500); // Flash every 500ms
+}
+
+// Stop flashing badge
+function stopBadgeFlashing() {
+  if (flashInterval) {
+    clearInterval(flashInterval);
+    flashInterval = null;
+  }
 }
 
 // Initialize badge on startup
@@ -28,146 +71,208 @@ chrome.tabs.onUpdated.addListener(updateBadge);
 
 // Function to start the printing process with selected tabs
 function startPrinting(selectedTabIds, settings = {}) {
-  if (intervalId) {
-    clearInterval(intervalId); // Clear any existing interval
+  if (timeoutId) {
+    clearTimeout(timeoutId);
+    timeoutId = null;
   }
 
-  // Update print settings with user preferences
+  // Update print settings
   printSettings.interval = settings.printInterval || 3000;
   printSettings.autoCloseTab = settings.autoCloseTab || false;
-  
+
   console.log("Print settings:", printSettings);
   console.log("Selected tab IDs:", selectedTabIds);
 
-  // Store only the selected tabs based on their IDs
-  tabsToPrint = [];
-  for (let i = 0; i < selectedTabIds.length; i++) {
-    const tabId = selectedTabIds[i];
-    const tab = allAvailableTabs.find(t => t.id === tabId);
-    if (tab) {
-      tabsToPrint.push(tab);
-    }
-  }
+  // Filter and store only the selected tabs based on their IDs
+  tabsToPrint = allAvailableTabs.filter((tab) => selectedTabIds.includes(tab.id));
 
   if (tabsToPrint.length === 0) {
     console.log("No valid tabs selected for printing.");
-    chrome.runtime.sendMessage({ status: "error", message: "No tabs selected for printing." });
+    updateBadge("error");
+    chrome.runtime.sendMessage({
+      status: "error",
+      message: "No tabs selected for printing.",
+    });
     return;
   }
 
+  isPrinting = true;
   tabIndex = 0;
-  console.log(`Starting print for ${tabsToPrint.length} selected tabs with ${printSettings.interval}ms interval.`);
+  console.log(
+    `Starting print for ${tabsToPrint.length} selected tabs with ${printSettings.interval}ms interval.`
+  );
   console.log("Tabs to print:", tabsToPrint);
-  chrome.runtime.sendMessage({ status: "started", message: `Printing ${tabsToPrint.length} tabs...` });
 
-  // Print first tab immediately
-  printNextTab();
+  // Start flashing badge to indicate printing
+  startBadgeFlashing();
+
+  chrome.runtime.sendMessage({
+    status: "started",
+    message: `Printing ${tabsToPrint.length} tabs...`,
+  });
+
+  // Start printing immediately
+  printCurrentTab();
 }
 
-// Function to print the next tab in sequence
-function printNextTab() {
+// Function to print the current tab and schedule the next one
+function printCurrentTab() {
   if (tabIndex >= tabsToPrint.length) {
     console.log("Finished printing all selected tabs.");
-    chrome.runtime.sendMessage({ status: "completed", message: "All selected tabs printed." });
+    isPrinting = false;
+    stopBadgeFlashing();
+    updateBadge("normal"); // Return to normal green
+    chrome.runtime.sendMessage({
+      status: "completed",
+      message: "All selected tabs printed.",
+    });
+    timeoutId = null;
     return;
   }
 
   const tab = tabsToPrint[tabIndex];
-  console.log(`Printing tab ${tabIndex + 1}/${tabsToPrint.length}: ${tab.title || tab.url}`);
+  console.log(
+    `Printing tab ${tabIndex + 1}/${tabsToPrint.length}: ${
+      tab.title || tab.url
+    }`
+  );
 
   // Check if tab still exists before trying to print
   chrome.tabs.get(tab.id, (tabInfo) => {
     if (chrome.runtime.lastError) {
       console.log(`Tab ${tab.id} no longer exists, skipping...`);
-      tabIndex++;
-      // Schedule next tab print
-      intervalId = setTimeout(printNextTab, printSettings.interval);
+      moveToNextTab();
       return;
     }
 
     // Activate the tab
     chrome.tabs.update(tab.id, { active: true }, () => {
       if (chrome.runtime.lastError) {
-        console.error(`Error activating tab ${tab.id}:`, chrome.runtime.lastError);
-        tabIndex++;
-        // Schedule next tab print
-        intervalId = setTimeout(printNextTab, printSettings.interval);
+        console.error(
+          `Error activating tab ${tab.id}:`,
+          chrome.runtime.lastError
+        );
+        updateBadge("error");
+        setTimeout(() => updateBadge("printing"), 2000); // Show error for 2 seconds then back to printing
+        moveToNextTab();
         return;
       }
 
       // Once the tab is active, execute the content script to print
-      chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ['content.js']
-      }).then(() => {
-        console.log(`Print script injected into tab: ${tab.id} - ${tab.title}`);
-        chrome.runtime.sendMessage({ status: "progress", message: `Printing: ${tab.title || tab.url}` });
-        
-        // Auto-close tab if setting is enabled
-        if (printSettings.autoCloseTab) {
-          setTimeout(() => {
-            chrome.tabs.remove(tab.id, () => {
-              if (chrome.runtime.lastError) {
-                console.log(`Could not close tab ${tab.id}:`, chrome.runtime.lastError.message);
-              } else {
-                console.log(`Auto-closed tab: ${tab.title || tab.url}`);
-              }
-              
-              // Move to next tab after closing
-              tabIndex++;
-              // Schedule next tab print
-              intervalId = setTimeout(printNextTab, printSettings.interval);
-            });
-          }, 1500); // Wait 1.5 seconds after printing before closing
-        } else {
-          // If not closing tab, move to next tab after a delay
-          tabIndex++;
-          // Schedule next tab print
-          intervalId = setTimeout(printNextTab, printSettings.interval);
-        }
-      }).catch(error => {
-        console.error(`Error injecting script into tab ${tab.id}:`, error);
-        chrome.runtime.sendMessage({ status: "error", message: `Error printing: ${tab.title || tab.url}` });
-        
-        // Move to next tab despite error
-        tabIndex++;
-        // Schedule next tab print
-        intervalId = setTimeout(printNextTab, printSettings.interval);
-      });
+      chrome.scripting
+        .executeScript({
+          target: { tabId: tab.id },
+          files: ["content.js"],
+        })
+        .then(() => {
+          console.log(
+            `Print script injected into tab: ${tab.id} - ${tab.title}`
+          );
+          chrome.runtime.sendMessage({
+            status: "progress",
+            message: `Printed ${tabIndex + 1}/${tabsToPrint.length}: ${
+              tab.title || tab.url
+            }`,
+          });
+
+          // Auto-close tab if setting is enabled
+          if (printSettings.autoCloseTab) {
+            setTimeout(() => {
+              chrome.tabs.remove(tab.id, () => {
+                if (chrome.runtime.lastError) {
+                  console.log(
+                    `Could not close tab ${tab.id}:`,
+                    chrome.runtime.lastError.message
+                  );
+                  updateBadge("error");
+                  setTimeout(() => { if (isPrinting) startBadgeFlashing(); }, 2000);
+                } else {
+                  console.log(`Auto-closed tab: ${tab.title || tab.url}`);
+                }
+                moveToNextTab();
+              });
+            }, 1500); // Wait 1.5s after print before closing
+          } else {
+            moveToNextTab();
+          }
+        })
+        .catch((error) => {
+          console.error(`Error injecting script into tab ${tab.id}:`, error);
+          updateBadge("error");
+          setTimeout(() => { if (isPrinting) startBadgeFlashing(); }, 2000); // Show error for 2 seconds
+          chrome.runtime.sendMessage({
+            status: "error",
+            message: `Error printing: ${tab.title || tab.url}`,
+          });
+          moveToNextTab();
+        });
     });
   });
 }
 
-// Function to stop the printing process
-function stopPrinting() {
-  if (intervalId) {
-    clearTimeout(intervalId);
-    intervalId = null;
-    console.log("Auto printing stopped.");
-    chrome.runtime.sendMessage({ status: "stopped", message: "Auto printing stopped." });
+// Function to move to the next tab with proper timing
+function moveToNextTab() {
+  tabIndex++;
+  if (tabIndex < tabsToPrint.length) {
+    // Schedule next print with the specified interval
+    timeoutId = setTimeout(printCurrentTab, printSettings.interval);
+  } else {
+    // All tabs processed
+    printCurrentTab(); // This will trigger the completion message
   }
 }
+
+// Function to stop the printing process
+function stopPrinting() {
+  if (timeoutId) {
+    clearTimeout(timeoutId);
+    timeoutId = null;
+  }
+
+  isPrinting = false;
+  stopBadgeFlashing();
+  updateBadge("normal"); // Return to normal green
+
+  console.log("Auto printing stopped.");
+  chrome.runtime.sendMessage({
+    status: "stopped",
+    message: "Auto printing stopped.",
+  });
+}
+
+// Send a message to the popup when the background script is ready
+function signalBackgroundReady() {
+  chrome.runtime.sendMessage({ action: "backgroundReady" });
+  console.log("Background script signaled readiness.");
+}
+
+// Call signalBackgroundReady after a short delay
+setTimeout(signalBackgroundReady, 300);
 
 // Listener for messages from the popup or other parts of the extension
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "start") {
-    console.log("Received start request with:", request);
+    console.log("Start request received:", request);
     startPrinting(request.selectedTabIds, {
       printInterval: request.printInterval,
-      autoCloseTab: request.autoCloseTab
+      autoCloseTab: request.autoCloseTab,
     });
-    sendResponse({ status: "started", message: "Print job started" });
+    sendResponse({ status: "started", message: "Print job initiated" });
   } else if (request.action === "stop") {
     stopPrinting();
     sendResponse({ status: "stopped", message: "Print job stopped" });
   } else if (request.action === "getTabs") {
     // Query all tabs and organize by window
-    chrome.tabs.query({}, function(tabs) {
-      const validTabs = tabs.filter(tab => !tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://'));
-      
+    chrome.tabs.query({}, function (tabs) {
+      const validTabs = tabs.filter(
+        (tab) =>
+          !tab.url.startsWith("chrome://") &&
+          !tab.url.startsWith("chrome-extension://")
+      );
+
       // Group tabs by window
       const tabsByWindow = {};
-      validTabs.forEach(tab => {
+      validTabs.forEach((tab) => {
         if (!tabsByWindow[tab.windowId]) {
           tabsByWindow[tab.windowId] = [];
         }
@@ -176,21 +281,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
       // Get window information
       chrome.windows.getAll({}, (windows) => {
-        const windowsWithTabs = windows.map(window => ({
-          id: window.id,
-          focused: window.focused,
-          type: window.type,
-          tabs: tabsByWindow[window.id] || []
-        })).filter(window => window.tabs.length > 0);
+        const windowsWithTabs = windows
+          .map((window) => ({
+            id: window.id,
+            focused: window.focused,
+            type: window.type,
+            tabs: tabsByWindow[window.id] || [],
+          }))
+          .filter((window) => window.tabs.length > 0);
 
         allAvailableTabs = validTabs;
-        sendResponse({ 
+        sendResponse({ status: "tabData" });
+        chrome.runtime.sendMessage({
+          action: "tabData",
           windows: windowsWithTabs,
           tabs: validTabs,
-          totalCount: validTabs.length 
+          totalCount: validTabs.length,
         });
       });
     });
     return true;
+  } else if (request.action === "popupOpened") {
+    sendResponse({ status: "backgroundAck" });
+    signalBackgroundReady();
   }
+  return true;
 });

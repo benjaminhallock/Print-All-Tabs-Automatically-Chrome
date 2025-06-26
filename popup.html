@@ -309,13 +309,13 @@
         <p>Add these flags to your Chrome shortcut target:</p>
         <div class="code-snippet">
           <span class="code-text">--kiosk-printing</span>
-          <!-- <button class="copy-btn" onclick="copyToClipboard('--kiosk-printing', this)">Copy</button> -->
+          <button class="copy-btn" id="copyKioskPrinting">Copy</button>
           <span class="copy-feedback">Copied!</span>
         </div>
         <p><strong>Full Example:</strong></p>
         <div class="code-snippet">
           <span class="code-text">"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing</span>
-          <!-- <button class="copy-btn" onclick="copyToClipboard('\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" --kiosk-printing', this)">Copy</button> -->
+          <button class="copy-btn" id="copyFullExample">Copy</button>
           <span class="copy-feedback">Copied!</span>
         </div>
         <p class="mt-2"><strong>Steps:</strong> Right-click Chrome shortcut -> Properties -> Add flags to Target field -> Apply</p>
@@ -356,90 +356,6 @@
     <p id="status" class="status-message">Status: Ready.</p>
   </div>
   <script src="popup.js"></script>
-  <script>
-    // Kiosk warning functionality
-    document.addEventListener('DOMContentLoaded', function() {
-      const kioskWarning = document.getElementById('kioskWarning');
-      const dismissBtn = document.getElementById('dismissBtn');
-      const expandIcon = kioskWarning.querySelector('.expand-icon');
-      
-      // Check if user has previously dismissed
-      const hasDismissed = localStorage.getItem('kioskWarningDismissed');
-      if (hasDismissed === 'true') {
-        kioskWarning.classList.add('collapsed');
-        dismissBtn.style.display = 'none';
-        expandIcon.style.display = 'inline';
-      }
-      
-      // Handle dismiss button
-      dismissBtn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        kioskWarning.classList.add('collapsed');
-        dismissBtn.style.display = 'none';
-        expandIcon.style.display = 'inline';
-        localStorage.setItem('kioskWarningDismissed', 'true');
-      });
-      
-      // Handle click to expand when collapsed
-      kioskWarning.addEventListener('click', function() {
-        if (kioskWarning.classList.contains('collapsed')) {
-          kioskWarning.classList.remove('collapsed');
-          dismissBtn.style.display = 'inline-block';
-          expandIcon.style.display = 'none';
-        }
-      });
-    });
-
-    // Copy to clipboard function
-    function copyToClipboard(text, button) {
-      navigator.clipboard.writeText(text).then(function() {
-        const feedback = button.nextElementSibling;
-        feedback.classList.add('show');
-        setTimeout(() => {
-          feedback.classList.remove('show');
-        }, 1500);
-      }).catch(function(err) {
-        console.error('Could not copy text: ', err);
-        // Fallback for older browsers
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-        
-        const feedback = button.nextElementSibling;
-        feedback.classList.add('show');
-        setTimeout(() => {
-          feedback.classList.remove('show');
-        }, 1500);
-      });
-    }
-  </script>
+  <script src="warning.js"></script>
 </body>
 </html>
-
-<!-- <!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: sans-serif; padding: 10px; }
-    ul { max-height: 200px; overflow-y: auto; }
-    label { display: block; margin-bottom: 4px; }
-    button { margin-top: 10px; }
-  </style>
-</head>
-<body>
-  <h3>Select Tabs to Print</h3>
-  <label><input type="checkbox" id="selectAll"> Select All</label>
-  <ul id="tabList"></ul>
-  <button id="printBtn">Print Selected</button>
-  <hr>
-  <h4>! Kiosk Mode Required !</h4>
-  <p>To print automatically, add this to your Chrome shortcut:</p>
-  <code>--kiosk-printing</code>
-  <p>Right-click → Properties → Target:</p>
-  <code>"C:\Path\to\chrome.exe" --kiosk-printing</code>
-</body>
-<script src="popup.js"></script>
-</html> -->
