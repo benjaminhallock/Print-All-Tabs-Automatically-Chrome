@@ -9,6 +9,7 @@ let printSettings = {
 };
 let isPrinting = false;
 let flashInterval = null;
+let isPopupOpen = false;
 
 // Update badge with total tab count and status color
 function updateBadge(status = "normal") {
@@ -69,6 +70,19 @@ chrome.tabs.onCreated.addListener(updateBadge);
 chrome.tabs.onRemoved.addListener(updateBadge);
 chrome.tabs.onUpdated.addListener(updateBadge);
 
+// Function to safely send messages to popup
+function sendToPopup(message) {
+  if (isPopupOpen) {
+    chrome.runtime.sendMessage(message).catch((error) => {
+      // Popup was closed, update flag
+      if (error.message.includes("Receiving end does not exist")) {
+        isPopupOpen = false;
+      }
+      console.log("Message not sent, popup likely closed:", error.message);
+    });
+  }
+}
+
 // Function to start the printing process with selected tabs
 function startPrinting(selectedTabIds, settings = {}) {
   if (timeoutId) {
@@ -89,7 +103,7 @@ function startPrinting(selectedTabIds, settings = {}) {
   if (tabsToPrint.length === 0) {
     console.log("No valid tabs selected for printing.");
     updateBadge("error");
-    chrome.runtime.sendMessage({
+    sendToPopup({
       status: "error",
       message: "No tabs selected for printing.",
     });
@@ -122,7 +136,7 @@ function printCurrentTab() {
     isPrinting = false;
     stopBadgeFlashing();
     updateBadge("normal"); // Return to normal green
-    chrome.runtime.sendMessage({
+    sendToPopup({
       status: "completed",
       message: "All selected tabs printed.",
     });
@@ -168,7 +182,7 @@ function printCurrentTab() {
           console.log(
             `Print script injected into tab: ${tab.id} - ${tab.title}`
           );
-          chrome.runtime.sendMessage({
+          sendToPopup({
             status: "progress",
             message: `Printed ${tabIndex + 1}/${tabsToPrint.length}: ${
               tab.title || tab.url
@@ -200,7 +214,7 @@ function printCurrentTab() {
           console.error(`Error injecting script into tab ${tab.id}:`, error);
           updateBadge("error");
           setTimeout(() => { if (isPrinting) startBadgeFlashing(); }, 2000); // Show error for 2 seconds
-          chrome.runtime.sendMessage({
+          sendToPopup({
             status: "error",
             message: `Error printing: ${tab.title || tab.url}`,
           });
@@ -234,7 +248,7 @@ function stopPrinting() {
   updateBadge("normal"); // Return to normal green
 
   console.log("Auto printing stopped.");
-  chrome.runtime.sendMessage({
+  sendToPopup({
     status: "stopped",
     message: "Auto printing stopped.",
   });
@@ -242,7 +256,7 @@ function stopPrinting() {
 
 // Send a message to the popup when the background script is ready
 function signalBackgroundReady() {
-  chrome.runtime.sendMessage({ action: "backgroundReady" });
+  sendToPopup({ action: "backgroundReady" });
   console.log("Background script signaled readiness.");
 }
 
@@ -251,7 +265,16 @@ setTimeout(signalBackgroundReady, 300);
 
 // Listener for messages from the popup or other parts of the extension
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  // Track when popup is open
+  if (request.action === "popupOpened") {
+    isPopupOpen = true;
+    sendResponse({ status: "backgroundAck" });
+    signalBackgroundReady();
+    return true;
+  }
+
   if (request.action === "start") {
+    isPopupOpen = true; // Popup is definitely open if sending start request
     console.log("Start request received:", request);
     startPrinting(request.selectedTabIds, {
       printInterval: request.printInterval,
@@ -259,9 +282,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
     sendResponse({ status: "started", message: "Print job initiated" });
   } else if (request.action === "stop") {
+    isPopupOpen = true;
     stopPrinting();
     sendResponse({ status: "stopped", message: "Print job stopped" });
   } else if (request.action === "getTabs") {
+    isPopupOpen = true;
     // Query all tabs and organize by window
     chrome.tabs.query({}, function (tabs) {
       const validTabs = tabs.filter(
@@ -292,7 +317,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
         allAvailableTabs = validTabs;
         sendResponse({ status: "tabData" });
-        chrome.runtime.sendMessage({
+        sendToPopup({
           action: "tabData",
           windows: windowsWithTabs,
           tabs: validTabs,
@@ -301,9 +326,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
     });
     return true;
-  } else if (request.action === "popupOpened") {
-    sendResponse({ status: "backgroundAck" });
-    signalBackgroundReady();
   }
   return true;
+});
+
+// Track when popup closes by detecting port disconnection
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === "popup") {
+    port.onDisconnect.addListener(() => {
+      isPopupOpen = false;
+      console.log("Popup disconnected");
+    });
+  }
 });

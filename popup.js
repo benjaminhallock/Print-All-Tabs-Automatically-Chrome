@@ -1,5 +1,8 @@
 // popup.js
 document.addEventListener("DOMContentLoaded", () => {
+  // Connect to background script to track popup state
+  const port = chrome.runtime.connect({ name: "popup" });
+
   const startButton = document.getElementById("startButton");
   const stopButton = document.getElementById("stopButton");
   const statusElement = document.getElementById("status");
@@ -66,7 +69,9 @@ document.addEventListener("DOMContentLoaded", () => {
   setTimeout(() => {
     if (!backgroundReady) {
       console.log("Requesting background script to signal readiness.");
-      chrome.runtime.sendMessage({ action: "popupOpened" });
+      chrome.runtime.sendMessage({ action: "popupOpened" }).catch((error) => {
+        console.log("Error sending popupOpened message:", error);
+      });
     }
   }, 500); // Wait 500ms before prompting background
 
