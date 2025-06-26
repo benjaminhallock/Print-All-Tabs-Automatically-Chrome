@@ -1,361 +1,445 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <title>Auto Print Tabs</title>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-  <style>
-    body {
-      font-family: 'Inter', sans-serif;
-      width: 380px; /* Slightly increased width for new controls */
-      padding: 20px;
-      background-color: #f0f4f8;
-      border-radius: 12px;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-    }
-    .container {
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-    }
-    .section-title {
-      font-size: 1.1em;
-      font-weight: bold;
-      color: #2c3e50;
-      margin-bottom: 8px;
-    }
-    .button {
-      padding: 12px 20px;
-      border-radius: 10px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: all 0.2s ease-in-out;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-      border: none;
-    }
-    .button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
-    }
-    .start-button {
-      background-color: #28a745; /* Green */
-      color: white;
-    }
-    .start-button:active {
-      background-color: #218838;
-    }
-    .stop-button {
-      background-color: #dc3545; /* Red */
-      color: white;
-    }
-    .stop-button:active {
-      background-color: #c82333;
-    }
-    .status-message {
-      text-align: center;
-      margin-top: 10px;
-      font-size: 0.9em;
-      color: #333;
-      padding: 10px;
-      background-color: #e2e8f0;
-      border-radius: 6px;
-      border-left: 4px solid #3182ce;
-    }
-    .kiosk-warning {
-      background-color: #fff3cd;
-      border: 1px solid #ffeeba;
-      border-radius: 8px;
-      padding: 15px;
-      color: #856404;
-      font-size: 0.9em;
-      line-height: 1.4;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-      transition: all 0.3s ease-in-out;
-    }
-    .kiosk-warning.collapsed {
-      padding: 8px 15px;
-      cursor: pointer;
-      background-color: #f8f9fa;
-      border-color: #dee2e6;
-    }
-    .kiosk-warning.collapsed:hover {
-      background-color: #e9ecef;
-    }
-    .kiosk-warning-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 8px;
-    }
-    .kiosk-warning.collapsed .kiosk-warning-header {
-      margin-bottom: 0;
-    }
-    .kiosk-warning-content {
-      overflow: hidden;
-      transition: max-height 0.3s ease-in-out;
-      max-height: 500px;
-    }
-    .kiosk-warning.collapsed .kiosk-warning-content {
-      max-height: 0;
-      margin: 0;
-      padding: 0;
-    }
-    .warning-controls {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-    .dismiss-btn, .copy-btn {
-      background-color: #007bff;
-      color: white;
-      border: none;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 0.75em;
-      cursor: pointer;
-      font-weight: bold;
-      transition: all 0.2s;
-    }
-    .dismiss-btn:hover, .copy-btn:hover {
-      background-color: #0056b3;
-      transform: translateY(-1px);
-    }
-    .dismiss-btn {
-      background-color: #28a745;
-    }
-    .dismiss-btn:hover {
-      background-color: #218838;
-    }
-    .expand-icon {
-      font-size: 0.8em;
-      color: #6c757d;
-      transition: transform 0.3s ease;
-    }
-    .kiosk-warning.collapsed .expand-icon {
-      transform: rotate(180deg);
-    }
-    .code-snippet {
-      background-color: #f8f9fa;
-      border: 1px solid #dee2e6;
-      border-radius: 4px;
-      padding: 8px 12px;
-      font-family: 'Courier New', monospace;
-      font-size: 0.85em;
-      margin: 8px 0;
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .code-text {
-      flex-grow: 1;
-      margin-right: 10px;
-      word-break: break-all;
-    }
-    .copy-feedback {
-      position: absolute;
-      top: -25px;
-      right: 0;
-      background-color: #28a745;
-      color: white;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-size: 0.7em;
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-    .copy-feedback.show {
-      opacity: 1;
-    }
-    .tab-list-container {
-      max-height: 300px;
-      overflow-y: auto;
-      border: 1px solid #cbd5e0;
-      border-radius: 8px;
-      padding: 15px;
-      background-color: #ffffff;
-    }
-    .window-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px 0 8px 0;
-      border-bottom: 2px solid #e2e8f0;
-      margin-bottom: 10px;
-      background: linear-gradient(90deg, #f7fafc 0%, #edf2f7 100%);
-      border-radius: 6px;
-      padding: 10px 12px;
-      margin: 0 -5px 10px -5px;
-    }
-    .window-title {
-      font-size: 1em;
-      font-weight: bold;
-      color: #2d3748;
-      margin: 0;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .window-icon {
-      font-size: 1.2em;
-    }
-    .tab-count {
-      font-size: 0.85em;
-      color: #718096;
-      font-weight: normal;
-    }
-    .select-window-label {
-      font-size: 0.8em;
-      color: #4a5568;
-      margin-left: 5px;
-    }
-    .window-checkbox {
-      transform: scale(1.1);
-    }
-    .window-tabs-container {
-      margin-left: 15px;
-      margin-bottom: 20px;
-      border-left: 3px solid #e2e8f0;
-      padding-left: 15px;
-    }
-    .tab-item {
-      display: flex;
-      align-items: center;
-      margin-bottom: 6px;
-      padding: 6px 8px;
-      border-radius: 4px;
-      transition: background-color 0.2s;
-    }
-    .tab-item:hover {
-      background-color: #f7fafc;
-    }
-    .tab-item:last-child {
-      border-bottom: none;
-    }
-    .tab-item input[type="checkbox"] {
-      margin-right: 12px;
-      transform: scale(1.1);
-    }
-    .tab-item label {
-      font-size: 0.85em;
-      color: #4a5568;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      flex-grow: 1;
-      cursor: pointer;
-    }
-    /* Custom checkbox styling */
-    input[type="checkbox"]:indeterminate {
-      background-color: #3182ce;
-      border-color: #3182ce;
-    }
-    .settings-section {
-      background-color: #ffffff;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 15px;
-      margin: 10px 0;
-    }
-    .setting-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-    }
-    .setting-item:last-child {
-      margin-bottom: 0;
-    }
-    .setting-label {
-      font-size: 0.9em;
-      color: #4a5568;
-      font-weight: 500;
-    }
-    .time-input {
-      width: 80px;
-      padding: 6px 10px;
-      border: 1px solid #cbd5e0;
-      border-radius: 4px;
-      font-size: 0.9em;
-      text-align: center;
-    }
-    .time-input:focus {
-      outline: none;
-      border-color: #3182ce;
-      box-shadow: 0 0 0 2px rgba(49, 130, 206, 0.2);
-    }
-    .unit-label {
-      font-size: 0.8em;
-      color: #718096;
-      margin-left: 5px;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1 class="text-xl font-extrabold text-gray-800 text-center mb-4">Auto Print Tabs</h1>
-
-    <div id="kioskWarning" class="kiosk-warning">
-      <div class="kiosk-warning-header">
-        <p class="font-bold text-lg text-red-700 m-0"> Enable Kiosk Mode for Best Results</p>
-        <div class="warning-controls">
-          <!-- <button id="dismissBtn" class="dismiss-btn">Dismiss</button> -->
-          <span class="expand-icon" style="display: none;">▼</span>
+  <head>
+    <title>Auto Print Tabs</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+        width: 380px; /* Slightly increased width for new controls */
+        padding: 20px;
+        background-color: #f0f4f8;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+      .section-title {
+        font-size: 1.1em;
+        font-weight: bold;
+        color: #2c3e50;
+        margin-bottom: 8px;
+      }
+      .button {
+        padding: 12px 20px;
+        border-radius: 10px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        border: none;
+      }
+      .button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+      }
+      .start-button {
+        background-color: #28a745; /* Green */
+        color: white;
+      }
+      .start-button:active {
+        background-color: #218838;
+      }
+      .stop-button {
+        background-color: #dc3545; /* Red */
+        color: white;
+      }
+      .stop-button:active {
+        background-color: #c82333;
+      }
+      .status-message {
+        text-align: center;
+        margin-top: 10px;
+        font-size: 0.9em;
+        color: #333;
+        padding: 10px;
+        background-color: #e2e8f0;
+        border-radius: 6px;
+        border-left: 4px solid #3182ce;
+      }
+      .kiosk-warning {
+        background-color: #fff3cd;
+        border: 1px solid #ffeeba;
+        border-radius: 8px;
+        padding: 15px;
+        color: #856404;
+        font-size: 0.9em;
+        line-height: 1.4;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        transition: all 0.3s ease-in-out;
+      }
+      .kiosk-warning.collapsed {
+        padding: 8px 15px;
+        cursor: pointer;
+        background-color: #f8f9fa;
+        border-color: #dee2e6;
+      }
+      .kiosk-warning.collapsed:hover {
+        background-color: #e9ecef;
+      }
+      .kiosk-warning-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+      .kiosk-warning.collapsed .kiosk-warning-header {
+        margin-bottom: 0;
+      }
+      .kiosk-warning-content {
+        overflow: hidden;
+        transition: max-height 0.3s ease-in-out;
+        max-height: 500px;
+      }
+      .kiosk-warning.collapsed .kiosk-warning-content {
+        max-height: 0;
+        margin: 0;
+        padding: 0;
+      }
+      .warning-controls {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .dismiss-btn,
+      .copy-btn {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.75em;
+        cursor: pointer;
+        font-weight: bold;
+        transition: all 0.2s;
+      }
+      .dismiss-btn:hover,
+      .copy-btn:hover {
+        background-color: #0056b3;
+        transform: translateY(-1px);
+      }
+      .dismiss-btn {
+        background-color: #286ca7;
+      }
+      .dismiss-btn:hover {
+        background-color: #218838;
+      }
+      .expand-icon {
+        font-size: 0.8em;
+        color: #6c757d;
+        transition: transform 0.3s ease;
+      }
+      .kiosk-warning.collapsed .expand-icon {
+        transform: rotate(180deg);
+      }
+      .code-snippet {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 8px 12px;
+        font-family: "Courier New", monospace;
+        font-size: 0.85em;
+        margin: 8px 0;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .code-text {
+        flex-grow: 1;
+        margin-right: 10px;
+        word-break: break-all;
+      }
+      .copy-feedback {
+        position: absolute;
+        top: -25px;
+        right: 0;
+        background-color: #28a745;
+        color: white;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.7em;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      .copy-feedback.show {
+        opacity: 1;
+      }
+      .tab-list-container {
+        max-height: 300px;
+        overflow-y: auto;
+        border: 1px solid #cbd5e0;
+        border-radius: 8px;
+        padding: 15px;
+        background-color: #ffffff;
+      }
+      .window-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 0 8px 0;
+        border-bottom: 2px solid #e2e8f0;
+        margin-bottom: 10px;
+        background: linear-gradient(90deg, #f7fafc 0%, #edf2f7 100%);
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin: 0 -5px 10px -5px;
+      }
+      .window-title {
+        font-size: 1em;
+        font-weight: bold;
+        color: #2d3748;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .window-icon {
+        font-size: 1.2em;
+      }
+      .tab-count {
+        font-size: 0.85em;
+        color: #718096;
+        font-weight: normal;
+      }
+      .select-window-label {
+        font-size: 0.8em;
+        color: #4a5568;
+        margin-left: 5px;
+      }
+      .window-checkbox {
+        transform: scale(1.1);
+      }
+      .window-tabs-container {
+        margin-left: 15px;
+        margin-bottom: 20px;
+        border-left: 3px solid #e2e8f0;
+        padding-left: 15px;
+      }
+      .tab-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 6px;
+        padding: 6px 8px;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+      }
+      .tab-item:hover {
+        background-color: #f7fafc;
+      }
+      .tab-item:last-child {
+        border-bottom: none;
+      }
+      .tab-item input[type="checkbox"] {
+        margin-right: 12px;
+        transform: scale(1.1);
+      }
+      .tab-item label {
+        font-size: 0.85em;
+        color: #4a5568;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex-grow: 1;
+        cursor: pointer;
+      }
+      /* Custom checkbox styling */
+      input[type="checkbox"]:indeterminate {
+        background-color: #3182ce;
+        border-color: #3182ce;
+      }
+      .settings-section {
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 10px 0;
+      }
+      .setting-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+      .setting-item:last-child {
+        margin-bottom: 0;
+      }
+      .setting-label {
+        font-size: 0.9em;
+        color: #4a5568;
+        font-weight: 500;
+      }
+      .time-input {
+        width: 80px;
+        padding: 6px 10px;
+        border: 1px solid #cbd5e0;
+        border-radius: 4px;
+        font-size: 0.9em;
+        text-align: center;
+      }
+      .time-input:focus {
+        outline: none;
+        border-color: #3182ce;
+        box-shadow: 0 0 0 2px rgba(49, 130, 206, 0.2);
+      }
+      .unit-label {
+        font-size: 0.8em;
+        color: #718096;
+        margin-left: 5px;
+      }
+      .print-mode-select,
+      .pdf-combine-select {
+        padding: 6px 10px;
+        border: 1px solid #cbd5e0;
+        border-radius: 4px;
+        font-size: 0.9em;
+        background-color: white;
+      }
+      .pdf-options {
+        margin-left: 20px;
+        padding-left: 15px;
+        border-left: 3px solid #e2e8f0;
+        margin-top: 10px;
+      }
+      .location-btn {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 0.8em;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      .location-btn:hover {
+        background-color: #0056b3;
+      }
+      .selected-path {
+        font-size: 0.8em;
+        color: #718096;
+        margin-left: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div id="kioskWarning" class="kiosk-warning">
+        <div class="kiosk-warning-header">
+          <p class="font-bold text-lg text-red-700 m-0">Enable Kiosk Mode!</p>
+          <div class="warning-controls">
+            <button id="dismissBtn" class="dismiss-btn">Dismiss</button>
+            <span
+              class="expand-icon"
+              style="
+                display: none;
+                background-color: #6c757d;
+                color: white;
+                padding: 2px 6px;
+                border-radius: 3px;
+              "
+            ></span>
+          </div>
+        </div>
+        <div class="kiosk-warning-content">
+            <p>
+            To print PDFs, set Microsoft's PDF printer as your default printer first. Adjust margins and zoom settings as needed. After enabling --kiosk-printing, ensure all Chrome processes are closed or restart your PC. Note that Chrome cannot stitch PDFs; use a separate tool or website for this purpose.
+            </p>
+            <br />
+            <p>
+            For automatic printing, modify your Chrome shortcut (Right-click > Properties) to include the following flags:
+            </p>
+          <br />
+          <p><strong>Quick Setup:</strong></p>
+          <p>Add these flags to your Chrome shortcut target:</p>
+          <div class="code-snippet">
+            <span class="code-text">--kiosk-printing</span>
+            <button class="copy-btn" id="copyKioskPrinting">Copy</button>
+            <span class="copy-feedback">Copied!</span>
+          </div>
+          <p><strong>Full Example:</strong></p>
+          <div class="code-snippet">
+            <span class="code-text"
+              >"C:\Program Files\Google\Chrome\Application\chrome.exe"
+              --kiosk-printing</span
+            >
+            <button class="copy-btn" id="copyFullExample">Copy</button>
+            <span class="copy-feedback">Copied!</span>
+          </div>
+          <p class="mt-2">
+            <strong>Steps:</strong> Right-click Chrome shortcut > Properties >
+            Add flags to Target field > Apply, restart Chrome/PC then try again.
+          </p>
         </div>
       </div>
-      <div class="kiosk-warning-content">
-        <p>For automatic printing without user intervention, launch Chrome in Kiosk Mode.</p>
-      </br>
-        <p><strong>Quick Setup:</strong></p>
-        <p>Add these flags to your Chrome shortcut target:</p>
-        <div class="code-snippet">
-          <span class="code-text">--kiosk-printing</span>
-          <button class="copy-btn" id="copyKioskPrinting">Copy</button>
-          <span class="copy-feedback">Copied!</span>
-        </div>
-        <p><strong>Full Example:</strong></p>
-        <div class="code-snippet">
-          <span class="code-text">"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing</span>
-          <button class="copy-btn" id="copyFullExample">Copy</button>
-          <span class="copy-feedback">Copied!</span>
-        </div>
-        <p class="mt-2"><strong>Steps:</strong> Right-click Chrome shortcut -> Properties -> Add flags to Target field -> Apply</p>
-      </div>
-    </div>
 
-    <div>
-      <p class="section-title">Total Tabs Found: <span id="totalTabCount" class="font-normal text-blue-600">0</span></p>
-      <div class="flex items-center mb-3">
-        <input type="checkbox" id="selectAllTabs" class="mr-2 transform scale-125">
-        <label for="selectAllTabs" class="font-bold text-gray-700">Select All Tabs</label>
-      </div>
-      <div id="tabList" class="tab-list-container">
-        <p class="text-center text-gray-500">Loading tabs...</p>
-      </div>
-    </div>
-
-    <div class="settings-section">
-      <p class="section-title">Print Settings</p>
-      <div class="setting-item">
-        <label for="printInterval" class="setting-label">Time between prints:</label>
-        <div class="flex items-center">
-          <input type="number" id="printInterval" class="time-input" value="1" min="1" max="60">
-          <span class="unit-label">seconds</span>
+      <div>
+        <p class="section-title">
+          Total Tabs Found:
+          <span id="totalTabCount" class="font-normal text-blue-600">0</span>
+        </p>
+        <div class="flex items-center mb-3">
+          <input
+            type="checkbox"
+            id="selectAllTabs"
+            class="mr-2 transform scale-125"
+          />
+          <label for="selectAllTabs" class="font-bold text-gray-700"
+            >Select All Tabs</label
+          >
+        </div>
+        <div id="tabList" class="tab-list-container">
+          <p class="text-center text-gray-500">Loading tabs...</p>
         </div>
       </div>
-      <div class="setting-item">
-        <label for="autoCloseTab" class="setting-label">Auto-close tab after printing:</label>
-        <input type="checkbox" id="autoCloseTab" class="transform scale-125">
+
+      <div class="settings-section">
+        <p class="section-title">Print Settings</p>
+        <div class="setting-item">
+          <label for="printInterval" class="setting-label"
+            >Time between prints:</label
+          >
+          <div class="flex items-center">
+            <input
+              type="number"
+              id="printInterval"
+              class="time-input"
+              value="1"
+              min="1"
+              max="60"
+            />
+            <span class="unit-label">seconds</span>
+          </div>
+        </div>
+        <div class="setting-item">
+          <label for="autoCloseTab" class="setting-label"
+            >Auto-close tab after printing:</label
+          >
+          <input
+            type="checkbox"
+            id="autoCloseTab"
+            class="transform scale-125"
+          />
+        </div>
       </div>
-    </div>
 
-    <div class="flex gap-4">
-      <button id="startButton" class="button start-button flex-1">Start Auto Print</button>
-      <button id="stopButton" class="button stop-button flex-1">Stop Auto Print</button>
-    </div>
+      <div class="flex gap-4">
+        <button id="startButton" class="button start-button flex-1">
+          Start Auto Print
+        </button>
+        <button id="stopButton" class="button stop-button flex-1">
+          Stop Auto Print
+        </button>
+      </div>
 
-    <p id="status" class="status-message">Status: Ready.</p>
-  </div>
-  <script src="popup.js"></script>
-  <script src="warning.js"></script>
-</body>
+      <p id="status" class="status-message">Status: Ready.</p>
+    </div>
+    <script src="popup.js"></script>
+    <script src="warning.js"></script>
+  </body>
 </html>
