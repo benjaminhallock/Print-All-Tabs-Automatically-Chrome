@@ -10,6 +10,8 @@ let printSettings = {
 let isPrinting = false;
 let flashInterval = null;
 let isPopupOpen = false;
+let isKioskPrintingEnabled = false;
+let printDialogTimeout = null;
 
 // Update badge with total tab count and status color
 function updateBadge(status = "normal") {
@@ -81,6 +83,48 @@ function sendToPopup(message) {
       console.log("Message not sent, popup likely closed:", error.message);
     });
   }
+}
+
+// Detect if kiosk printing is enabled by checking if print dialog appears
+function checkKioskPrintingMode(tabId) {
+  return new Promise((resolve) => {
+    // Inject a script to detect if print dialog appears
+    chrome.scripting
+      .executeScript({
+        target: { tabId: tabId },
+        func: () => {
+          // Override window.print to detect if it's called
+          let printCalled = false;
+          const originalPrint = window.print;
+
+          window.print = function () {
+            printCalled = true;
+            originalPrint.call(this);
+            return true;
+          };
+
+          // Try to trigger print
+          setTimeout(() => {
+            window.print();
+          }, 100);
+
+          // Check if print was intercepted (kiosk mode) or showed dialog (normal mode)
+          setTimeout(() => {
+            // In kiosk mode, print happens immediately without user interaction
+            // In normal mode, print dialog appears and waits for user
+            window.print = originalPrint; // Restore original
+            return printCalled;
+          }, 500);
+        },
+      })
+      .then(() => {
+        // If we get here quickly, kiosk mode is likely enabled
+        resolve(true);
+      })
+      .catch(() => {
+        resolve(false);
+      });
+  });
 }
 
 // Function to start the printing process with selected tabs
@@ -182,33 +226,66 @@ function printCurrentTab() {
           console.log(
             `Print script injected into tab: ${tab.id} - ${tab.title}`
           );
-          sendToPopup({
-            status: "progress",
-            message: `Printed ${tabIndex + 1}/${tabsToPrint.length}: ${
-              tab.title || tab.url
-            }`,
-          });
 
-          // Auto-close tab if setting is enabled
-          if (printSettings.autoCloseTab) {
-            setTimeout(() => {
-              chrome.tabs.remove(tab.id, () => {
-                if (chrome.runtime.lastError) {
-                  console.log(
-                    `Could not close tab ${tab.id}:`,
-                    chrome.runtime.lastError.message
-                  );
-                  updateBadge("error");
-                  setTimeout(() => { if (isPrinting) startBadgeFlashing(); }, 2000);
-                } else {
-                  console.log(`Auto-closed tab: ${tab.title || tab.url}`);
-                }
-                moveToNextTab();
+          // Set up a timeout to detect if print dialog doesn't appear (kiosk mode)
+          let printCompleted = false;
+
+          printDialogTimeout = setTimeout(() => {
+            if (!printCompleted) {
+              // If we're here, either kiosk printing worked or nothing happened
+              sendToPopup({
+                status: "progress",
+                message: `Printed ${tabIndex + 1}/${tabsToPrint.length}: ${
+                  tab.title || tab.url
+                }`,
               });
-            }, 1500); // Wait 1.5s after print before closing
-          } else {
-            moveToNextTab();
-          }
+              printCompleted = true;
+
+              // Auto-close tab if setting is enabled and we think print worked
+              if (printSettings.autoCloseTab) {
+                setTimeout(() => {
+                  chrome.tabs.remove(tab.id, () => {
+                    if (chrome.runtime.lastError) {
+                      console.log(
+                        `Could not close tab ${tab.id}:`,
+                        chrome.runtime.lastError.message
+                      );
+                    } else {
+                      console.log(`Auto-closed tab: ${tab.title || tab.url}`);
+                    }
+                    moveToNextTab();
+                  });
+                }, 1500); // Wait 1.5s after print before closing
+              } else {
+                moveToNextTab();
+              }
+            }
+          }, 2000); // Wait 2 seconds for kiosk printing to complete
+
+          // Listen for manual print completion (non-kiosk mode)
+          chrome.tabs.onUpdated.addListener(function printListener(tabId, changeInfo) {
+            if (tabId === tab.id && !printCompleted) {
+              printCompleted = true;
+              clearTimeout(printDialogTimeout);
+              chrome.tabs.onUpdated.removeListener(printListener);
+
+              // Check if user actually printed or cancelled
+              setTimeout(() => {
+                sendToPopup({
+                  status: "warning",
+                  message: `Manual print required for: ${tab.title || tab.url}. Enable --kiosk-printing for automation.`,
+                });
+
+                // Don't auto-close if kiosk printing isn't enabled
+                if (!printSettings.autoCloseTab) {
+                  moveToNextTab();
+                } else {
+                  // Give user time to print manually before moving on
+                  setTimeout(moveToNextTab, 5000);
+                }
+              }, 1000);
+            }
+          });
         })
         .catch((error) => {
           console.error(`Error injecting script into tab ${tab.id}:`, error);

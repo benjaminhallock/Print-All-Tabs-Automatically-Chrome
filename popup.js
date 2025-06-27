@@ -261,10 +261,34 @@ document.addEventListener("DOMContentLoaded", () => {
   // Listen for status updates from the background script
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.status) {
-      statusElement.textContent = `Status: ${
+      // Handle different status types with appropriate styling
+      let statusClass = "status-message";
+      let statusPrefix = "Status: ";
+      
+      switch(request.status) {
+        case "warning":
+          statusClass = "status-message" + " bg-yellow-100 border-yellow-400 text-yellow-800";
+          statusPrefix = "Warning: ";
+          break;
+        case "error":
+          statusClass = "status-message" + " bg-red-100 border-red-400 text-red-800";
+          statusPrefix = "Error: ";
+          break;
+        case "completed":
+          statusClass = "status-message" + " bg-green-100 border-green-400 text-green-800";
+          statusPrefix = "Completed: ";
+          break;
+        case "progress":
+          statusClass = "status-message" + " bg-blue-100 border-blue-400 text-blue-800";
+          statusPrefix = "In Progress: ";
+          break;
+      }
+      
+      statusElement.className = statusClass;
+      statusElement.textContent = statusPrefix + (
         request.message ||
         request.status.charAt(0).toUpperCase() + request.status.slice(1)
-      }.`;
+      );
     }
   });
 

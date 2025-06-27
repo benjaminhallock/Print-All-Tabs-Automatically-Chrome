@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "Print All Tabs Automatically (with Counter)",
     "version": "2.0",
-    "description": "Automatically prints selected tabs with window organization and visual tab counter. Perfect for batch printing with kiosk mode support.",
+    "description": "Prints all tabs to pdf/printer automatically with auto-close and tab counter.",
     "permissions": [
         "tabs",
         "scripting"

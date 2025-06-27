@@ -348,7 +348,7 @@
         </div>
         <div class="kiosk-warning-content">
             <p>
-            To print PDFs, set Microsoft's PDF printer as your default printer first. Adjust margins and zoom settings as needed. After enabling --kiosk-printing, ensure all Chrome processes are closed or restart your PC. Note that Chrome cannot stitch PDFs; use a separate tool or website for this purpose.
+            <strong>IMPORTANT:</strong> To print PDFs, set printer to PDF-to-file as your default printer first. After enabling --kiosk-printing, ensure all Chrome processes are closed or restart your PC.
             </p>
             <br />
             <p>
@@ -418,7 +418,7 @@
         </div>
         <div class="setting-item">
           <label for="autoCloseTab" class="setting-label"
-            >Auto-close tab after printing:</label
+            >Auto-close tab after printing (kiosk-mode only):</label
           >
           <input
             type="checkbox"
@@ -437,7 +437,7 @@
         </button>
       </div>
 
-      <p id="status" class="status-message">Status: Ready.</p>
+      <p id="status" class="status-message">Status: Ready. Enable --kiosk-printing for automatic operation.</p>
     </div>
     <script src="popup.js"></script>
     <script src="warning.js"></script>
